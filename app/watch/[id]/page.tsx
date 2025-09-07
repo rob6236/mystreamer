@@ -1,93 +1,147 @@
-// app/watch/[id]/page.tsx
 "use client";
 
-import { use, useEffect, useRef, useState } from "react";
-import { onAuthStateChanged, type User } from "firebase/auth";
-import { auth } from "@/lib/firebase";
-import { getProgress, upsertProgress } from "@/lib/watchHistory";
+import React from "react";
+import { useParams } from "next/navigation";
+import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { auth, db } from "../../../lib/firebase";
 
-export default function WatchPage({
-  params,
-}: {
-  // Next 15: params is a Promise — unwrap with React.use()'s `use`
-  params: Promise<{ id: string }>;
-}) {
-  const { id: videoId } = use(params);
-  const [user, setUser] = useState<User | null>(null);
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const lastWriteRef = useRef<number>(0);
+type VideoDoc = {
+  ownerUid: string;
+  title: string;
+  type: "long";
+  visibility: "public" | "private";
+  storagePath: string;
+  downloadURL: string;
+  thumbnailURL: string;
+  createdAt?: any;
+  updatedAt?: any;
+};
 
-  // Track auth state
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (u) => setUser(u));
-    return unsub;
-  }, []);
+export default function WatchPage() {
+  // ✅ Get the dynamic segment in a client component
+  const { id: videoId } = useParams<{ id: string }>();
 
-  // Resume from last position (if any)
-  useEffect(() => {
-    (async () => {
-      if (!user?.uid || !videoRef.current) return;
+  const [video, setVideo] = React.useState<VideoDoc | null>(null);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
+
+  const videoRef = React.useRef<HTMLVideoElement | null>(null);
+
+  // Fetch the video doc by ID
+  React.useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
       try {
-        const rec = await getProgress({ uid: user.uid, videoId });
-        if (rec?.lastPositionSec && Number.isFinite(rec.lastPositionSec)) {
-          videoRef.current.currentTime = rec.lastPositionSec;
+        setLoading(true);
+        setError(null);
+
+        const snap = await getDoc(doc(db, "videos", videoId));
+        if (!snap.exists()) {
+          setError("Video not found.");
+          setVideo(null);
+          return;
         }
-      } catch {
-        // ignore resume errors
+
+        const data = snap.data() as VideoDoc;
+        setVideo(data);
+      } catch (e: any) {
+        console.error(e);
+        setError(e?.message || "Failed to load video.");
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-    })();
-  }, [user?.uid, videoId]);
+    }
 
-  // Throttled writer (~every 2s while playing)
-  async function writeThrottled() {
-    if (!user?.uid || !videoRef.current) return;
-    const now = Date.now();
-    if (now - lastWriteRef.current < 2000) return;
-    lastWriteRef.current = now;
+    if (videoId) load();
+    return () => {
+      cancelled = true;
+    };
+  }, [videoId]);
 
+  // Save basic watch progress
+  React.useEffect(() => {
     const el = videoRef.current;
-    await upsertProgress({
-      uid: user.uid,
-      videoId,
-      currentTimeSec: el.currentTime || 0,
-      durationSec: el.duration || 0,
-    });
-  }
+    if (!el) return;
 
-  // Immediate write on pause/end (no throttle)
-  async function writeNow() {
-    if (!user?.uid || !videoRef.current) return;
-    const el = videoRef.current;
-    await upsertProgress({
-      uid: user.uid,
-      videoId,
-      currentTimeSec: el.currentTime || 0,
-      durationSec: el.duration || 0,
-    });
-  }
+    const user = auth.currentUser;
+    if (!user || !videoId) return;
+
+    let ticking = false;
+
+    const onTimeUpdate = () => {
+      if (ticking) return;
+      ticking = true;
+      setTimeout(async () => {
+        try {
+          await setDoc(
+            doc(db, "watchHistory", user.uid, "items", videoId),
+            {
+              videoId,
+              title: video?.title ?? "",
+              currentTime: el.currentTime,
+              duration: el.duration || null,
+              updatedAt: serverTimestamp(),
+            },
+            { merge: true }
+          );
+        } catch (e) {
+          console.warn("watchHistory write failed:", e);
+        } finally {
+          ticking = false;
+        }
+      }, 1000);
+    };
+
+    el.addEventListener("timeupdate", onTimeUpdate);
+    return () => {
+      el.removeEventListener("timeupdate", onTimeUpdate);
+    };
+  }, [videoId, video?.title]);
 
   return (
-    <main className="mx-auto max-w-4xl p-6">
-      <h1 className="mb-4 text-2xl font-semibold">Watching: {videoId}</h1>
+    <div className="mx-auto max-w-5xl px-4 py-8">
+      <h1 className="mb-6 text-2xl font-semibold">
+        Watching: <span className="font-mono">{videoId}</span>
+      </h1>
 
-      <div className="relative w-full overflow-hidden rounded-2xl border border-yellow-500/30">
-        {/* Demo source — replace with your own stream/Storage URL later */}
-        <video
-          ref={videoRef}
-          className="w-full h-auto"
-          controls
-          onTimeUpdate={writeThrottled}
-          onPause={writeNow}
-          onEnded={writeNow}
-          src="https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4"
-        />
-      </div>
-
-      {!user && (
-        <p className="mt-3 text-sm opacity-80">
-          Sign in to save and resume your watch progress.
-        </p>
+      {loading && (
+        <div className="rounded-xl border p-6">
+          <div className="flex items-center gap-3">
+            <span className="inline-block h-5 w-5 animate-spin rounded-full border-2 border-gray-300 border-t-transparent" />
+            <p className="text-sm text-gray-600 dark:text-gray-300">Loading video…</p>
+          </div>
+        </div>
       )}
-    </main>
+
+      {!loading && error && (
+        <div
+          role="alert"
+          className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-800/50 dark:bg-red-900/30 dark:text-red-200"
+        >
+          {error}
+        </div>
+      )}
+
+      {!loading && !error && video && (
+        <div className="rounded-2xl bg-black/10 p-2">
+          <video
+            ref={videoRef}
+            className="mx-auto block w-full max-w-4xl rounded-2xl"
+            src={video.downloadURL}
+            poster={video.thumbnailURL || undefined}
+            controls
+            playsInline
+            preload="metadata"
+          />
+          <div className="mt-3 text-sm text-gray-200">
+            <div className="font-medium">{video.title}</div>
+            <div className="opacity-70">
+              {video.visibility === "private" ? "Private" : "Public"} • {video.type}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
