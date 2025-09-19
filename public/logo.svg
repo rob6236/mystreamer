@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Integrity Streaming logo">
+  <!-- Colors -->
+  <defs>
+    <style>
+      .tv { fill: #0F172A; }          /* dark body of TV */
+      .screen { fill: #1035AC; }      /* brand blue screen */
+      .signal { fill: none; stroke: #800020; stroke-width: 16; stroke-linecap: round; } /* burgundy arcs */
+    </style>
+  </defs>
+
+  <!-- Old-fashioned TV body -->
+  <rect class="tv" x="56" y="112" width="400" height="264" rx="28" ry="28"/>
+  <!-- feet -->
+  <rect x="120" y="376" width="36" height="26" rx="6" fill="#0B1220"/>
+  <rect x="356" y="376" width="36" height="26" rx="6" fill="#0B1220"/>
+  <!-- antennas -->
+  <line x1="196" y1="100" x2="136" y2="52" stroke="#0F172A" stroke-width="14" stroke-linecap="round"/>
+  <line x1="316" y1="100" x2="376" y2="52" stroke="#0F172A" stroke-width="14" stroke-linecap="round"/>
+
+  <!-- Screen -->
+  <rect class="screen" x="84" y="140" width="344" height="208" rx="18" ry="18"/>
+
+  <!-- Streaming signal (three arcs starting near bottom-left of screen) -->
+  <path class="signal" d="M184 316c0-24 20-44 44-44"/>
+  <path class="signal" d="M160 316c0-41 33-74 74-74"/>
+  <path class="signal" d="M136 316c0-59 48-108 108-108"/>
+</svg>

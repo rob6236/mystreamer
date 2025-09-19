@@ -1,58 +1,73 @@
-"use client";
+'use client';
 
-import React from "react";
-import Link from "next/link";
-import { onAuthStateChanged, User } from "firebase/auth";
-import { auth } from "../../lib/firebase";
-import UploadForm from "./UploadForm";
-import MyVideosGrid from "./MyVideosGrid";
+import React, { useEffect, useState } from 'react';
+import { getAuth, onAuthStateChanged } from 'firebase/auth';
+
+// If these imports don't match your paths, change them to:
+//   import UploadForm from './UploadForm'
+//   import MyVideosGrid from './MyVideosGrid'
+import UploadForm from '@/components/studio/UploadForm';
+import MyVideosGrid from '@/components/studio/MyVideosGrid';
 
 export default function StudioPageClient() {
-  const [user, setUser] = React.useState<User | null>(null);
-  const [authLoading, setAuthLoading] = React.useState(true);
+  const [uid, setUid] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  React.useEffect(() => {
+  useEffect(() => {
+    const auth = getAuth();
     const unsub = onAuthStateChanged(auth, (u) => {
-      setUser(u);
-      setAuthLoading(false);
+      setUid(u?.uid ?? null);
+      setLoading(false);
     });
     return () => unsub();
   }, []);
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-6">
-      <header className="mb-6">
-        <h1 className="text-2xl font-semibold">MyStreamer Studio</h1>
-        <p className="mt-2 text-sm text-slate-800 dark:text-slate-100">
-          {authLoading ? "…" : user ? (
-            <>
-              Welcome, <span className="font-semibold">{user.email}</span>.
-            </>
-          ) : (
-            <>
-              You’re not signed in. Please{" "}
-              <Link href="/home" className="underline">
-                sign in
-              </Link>{" "}
-              to upload and manage your videos.
-            </>
-          )}
-        </p>
-      </header>
+    <div style={{ maxWidth: 960, margin: '0 auto', padding: '24px 16px' }}>
+      {/* New big heading with white outline/glow for burgundy background */}
+      <h1
+        style={{
+          margin: '0 0 24px 0',
+          fontSize: 32,
+          fontWeight: 900,
+          color: '#1035AC', // brand blue
+          textShadow:
+            '0 0 3px rgba(255,255,255,.95), 0 0 8px rgba(255,255,255,.55), 0 2px 2px rgba(0,0,0,.45), 1px 0 0 #fff, -1px 0 0 #fff, 0 1px 0 #fff, 0 -1px 0 #fff',
+        }}
+      >
+        Integrity Streaming Studio
+      </h1>
 
-      {/* Upload card */}
-      <section className="mb-8">
-        <div className="rounded-xl border p-4">
-          <UploadForm uid={user?.uid ?? null} />
-        </div>
+      {/* Upload section */}
+      <section style={{ marginBottom: 28 }}>
+        {!loading && !uid && (
+          <p style={{ margin: '0 0 12px 0' }}>
+            You’re not signed in. Please sign in to upload and manage your videos.
+          </p>
+        )}
+        {/* If your UploadForm expects props, pass them here. Many apps don’t need any. */}
+        <UploadForm />
       </section>
 
-      {/* My Videos */}
-      <section className="mt-8">
-        <h2 className="mb-3 text-lg font-semibold">My Videos</h2>
-        <div className="rounded-xl border p-4">
-          <MyVideosGrid uid={user?.uid ?? null} />
-        </div>
+      {/* My Videos section */}
+      <section>
+        <h2
+          style={{
+            margin: '0 0 12px 0',
+            fontSize: 24,
+            fontWeight: 800,
+            textShadow: '0 1px 1px rgba(0,0,0,.35)',
+          }}
+        >
+          My Videos
+        </h2>
+
+        {!loading && !uid ? (
+          <p>Please sign in to view your uploads.</p>
+        ) : (
+          // If your grid needs props, pass them here (e.g., uid).
+          <MyVideosGrid />
+        )}
       </section>
     </div>
   );
