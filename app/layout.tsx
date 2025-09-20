@@ -5,7 +5,10 @@ import Link from 'next/link';
 import Image from 'next/image';
 
 export const metadata: Metadata = {
-  title: 'Integrity Streaming',
+  title: {
+    default: 'Integrity Streaming',
+    template: '%s | Integrity Streaming',
+  },
   description: 'Create, go live, and grow—on Integrity Streaming.',
   themeColor: '#1035AC',
   icons: { icon: '/favicon.ico' },
@@ -15,7 +18,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const BLUE = '#1035AC';     // wordmark color
   const BURGUNDY = '#800020'; // page background
 
-  // ⬅️ bumped from 56 → 72
   const LOGO_SIZE = 72;  // px
   const TITLE_SIZE = 36; // px
 
@@ -74,26 +76,34 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </Link>
 
             <nav style={{ marginLeft: 'auto', display: 'flex', gap: 18, alignItems: 'center' }}>
-              {[
-                { href: '/home', label: 'Home' },
-                { href: '/studio', label: 'Studio' },
-              ].map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  style={{
-                    padding: '8px 10px',
-                    borderRadius: 10,
-                    textDecoration: 'none',
-                    color: '#FFFFFF',
-                    textShadow: '0 0 4px rgba(255,255,255,.55), 0 1px 1px rgba(0,0,0,.45)',
-                    border: '1px solid rgba(255,255,255,.18)',
-                    background: 'rgba(0,0,0,.15)',
-                  }}
-                >
-                  {item.label}
-                </Link>
-              ))}
+              <Link
+                href="/home"
+                style={{
+                  padding: '8px 10px',
+                  borderRadius: 10,
+                  textDecoration: 'none',
+                  color: '#FFFFFF',
+                  textShadow: '0 0 4px rgba(255,255,255,.55), 0 1px 1px rgba(0,0,0,.45)',
+                  border: '1px solid rgba(255,255,255,.18)',
+                  background: 'rgba(0,0,0,.15)',
+                }}
+              >
+                Home
+              </Link>
+              <Link
+                href="/studio"
+                style={{
+                  padding: '8px 10px',
+                  borderRadius: 10,
+                  textDecoration: 'none',
+                  color: '#FFFFFF',
+                  textShadow: '0 0 4px rgba(255,255,255,.55), 0 1px 1px rgba(0,0,0,.45)',
+                  border: '1px solid rgba(255,255,255,.18)',
+                  background: 'rgba(0,0,0,.15)',
+                }}
+              >
+                Studio
+              </Link>
             </nav>
           </div>
         </header>

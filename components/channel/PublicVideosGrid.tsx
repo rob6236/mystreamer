@@ -1,129 +1,133 @@
-"use client";
+'use client';
 
-import React from "react";
-import Link from "next/link";
+import { useEffect, useState } from 'react';
 import {
   collection,
-  getDocs,
-  orderBy,
+  onSnapshot,
   query,
   where,
+  orderBy,
   limit,
-  QuerySnapshot,
-  DocumentData,
-} from "firebase/firestore";
-import { db } from "../../lib/firebase";
+  Timestamp,
+} from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
-type VideoDoc = {
-  ownerUid: string;
-  title: string;
-  type: "long";
-  visibility: "public" | "private";
-  storagePath: string;
-  downloadURL: string;
-  thumbnailURL: string;
-  createdAt?: any;
-  updatedAt?: any;
+type Video = {
+  id: string;
+  title?: string;
+  ownerUid?: string;
+  visibility?: 'public' | 'private' | string;
+  createdAt?: Timestamp | null;
+  storagePath?: string;
+  filePath?: string;
+  fileUrl?: string;
 };
-type VideoRow = VideoDoc & { id: string };
 
-function normalize(s?: string) {
-  return (s || "").toLowerCase().trim().replace(/\s+/g, " ");
+function normalizeTitle(t?: string) {
+  return (t ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' '); // collapse extra spaces
 }
 
-function dedupe(rows: VideoRow[]) {
-  const seenTitle = new Set<string>();
-  const seenPath = new Set<string>();
-  const out: VideoRow[] = [];
-  for (const v of rows) {
-    const t = normalize(v.title) || v.id;
-    const p = v.storagePath || "";
-    if (seenTitle.has(t)) continue;
-    if (p && seenPath.has(p)) continue;
-    seenTitle.add(t);
-    if (p) seenPath.add(p);
-    out.push(v);
+function pickMostRecent(a: Video, b: Video) {
+  const aTime = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
+  const bTime = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
+  return bTime - aTime; // descending
+}
+
+function groupByTitleMostRecent(items: Video[], take = 12): Video[] {
+  const byTitle = new Map<string, Video[]>();
+
+  for (const v of items) {
+    const key = normalizeTitle(v.title) || '(untitled)';
+    if (!byTitle.has(key)) byTitle.set(key, []);
+    byTitle.get(key)!.push(v);
   }
-  return out;
+
+  // For each title, keep the most recent video
+  const uniques: Video[] = [];
+  for (const [, arr] of byTitle) {
+    arr.sort(pickMostRecent);
+    uniques.push(arr[0]);
+  }
+
+  // light shuffle for "random picks" feel
+  for (let i = uniques.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [uniques[i], uniques[j]] = [uniques[j], uniques[i]];
+  }
+
+  return uniques.slice(0, take);
 }
 
-export default function PublicVideosGrid({ uid }: { uid: string }) {
-  const [loading, setLoading] = React.useState(true);
-  const [err, setErr] = React.useState<string | null>(null);
-  const [rows, setRows] = React.useState<VideoRow[]>([]);
+export default function PublicVideosGrid() {
+  const [videos, setVideos] = useState<Video[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  React.useEffect(() => {
-    async function run() {
-      setErr(null);
-      setRows([]);
-      setLoading(true);
-      try {
-        const qRef = query(
-          collection(db, "videos"),
-          where("ownerUid", "==", uid),
-          where("visibility", "==", "public"),
-          orderBy("createdAt", "desc"),
-          limit(60)
-        );
-        const snap: QuerySnapshot<DocumentData> = await getDocs(qRef);
-        const all: VideoRow[] = [];
-        snap.forEach((d) => all.push({ id: d.id, ...(d.data() as VideoDoc) }));
+  useEffect(() => {
+    const q = query(
+      collection(db, 'videos'),
+      where('visibility', '==', 'public'),
+      orderBy('createdAt', 'desc'),
+      limit(100) // fetch more so grouping can choose latest
+    );
 
-        const notPlaceholder = (v: VideoRow) =>
-          v.thumbnailURL && v.thumbnailURL !== "/mystreamer.png";
-        setRows(dedupe(all.filter(notPlaceholder)));
-      } catch (e: any) {
-        setErr(String(e?.message || e));
-      } finally {
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const items: Video[] = snap.docs.map((d) => ({
+          id: d.id,
+          ...(d.data() as any),
+        }));
+        setVideos(groupByTitleMostRecent(items, 12));
+        setError(null);
+        setLoading(false);
+      },
+      (err) => {
+        console.error('PublicVideosGrid error:', err);
+        setError(err.message || 'Failed to load videos');
         setLoading(false);
       }
-    }
-    run();
-  }, [uid]);
-
-  if (loading) {
-    return <div className="rounded-lg border p-3 text-sm dark:border-gray-700">Loading…</div>;
-  }
-
-  if (err) {
-    return (
-      <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-800/50 dark:bg-red-900/30 dark:text-red-100">
-        {err}
-      </div>
     );
-  }
 
-  if (rows.length === 0) {
-    return <p className="text-sm">No public videos yet.</p>;
-  }
+    return () => unsub();
+  }, []);
+
+  if (loading) return <p>Loading…</p>;
+  if (error) return <p style={{ color: '#ffd2d2' }}>Error: {error}</p>;
+  if (!videos.length) return <p>No public videos yet.</p>;
 
   return (
-    <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {rows.map((v) => (
-        <li key={v.id} className="overflow-hidden rounded-xl border dark:border-gray-700">
-          <Link href={`/watch/${v.id}`} className="block">
-            <div className="aspect-video w-full overflow-hidden bg-black/10">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                alt={v.title}
-                src={v.thumbnailURL || "/mystreamer.png"}
-                className="h-full w-full object-cover"
-              />
-            </div>
-            <div className="p-3">
-              <div className="truncate text-sm font-semibold text-white">{v.title}</div>
-              <div className="mt-1 flex items-center gap-2">
-                <span className="inline-flex items-center rounded-full bg-white/10 px-2 py-0.5 text-[11px] font-semibold text-white">
-                  {v.type}
-                </span>
-                <span className="inline-flex items-center rounded-full bg-green-500/20 px-2 py-0.5 text-[11px] font-semibold text-white">
-                  {v.visibility}
-                </span>
-              </div>
-            </div>
-          </Link>
-        </li>
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
+        gap: 16,
+      }}
+    >
+      {videos.map((v) => (
+        <article
+          key={v.id}
+          style={{
+            border: '1px solid rgba(255,255,255,.18)',
+            background: 'rgba(0,0,0,.15)',
+            borderRadius: 12,
+            padding: 12,
+          }}
+        >
+          <div style={{ fontWeight: 800, marginBottom: 8 }}>
+            {v.title || 'Untitled'}
+          </div>
+          <div style={{ fontSize: 12, opacity: 0.85 }}>
+            {v.createdAt?.toDate
+              ? v.createdAt.toDate().toLocaleString()
+              : '—'}
+          </div>
+          {/* TODO: thumbnail/player/link to detail page */}
+        </article>
       ))}
-    </ul>
+    </div>
   );
 }
